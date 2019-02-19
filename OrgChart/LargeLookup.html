@@ -1,0 +1,275 @@
+<!-- Set Lookup Fields in Edit Forms for Large Lists in SharePoint  
+Reference: https://www.youtube.com/watch?v=3_Xm1k0IyUc
+-->
+
+<!--/*
+ * HillbillyLargeListLookup - Set the value of lookup fields to large lists
+ * Version 1.0 
+ * @requires jQuery v1.7 or greater 
+ *
+ * Copyright (c) 2016 Mark Rackley / PAIT Group
+ * Licensed under the MIT license:
+ * http://www.opensource.org/licenses/mit-license.php
+ */
+/**
+ * @descriptionSet the value of lookup fields to large lists
+ * @type jQuery
+ * @name HillbillyLargeListLookup 
+ * @category Plugins/PAITGroup
+ * @author Mark Rackley / http://www.markrackley.net / http://www.paitgroup.com / mrackley@paitgroup.com
+ *
+ */-->
+
+<script type="text/javascript" src="//code.jquery.com/jquery-1.12.3.min.js"></script>
+
+<script type="text/javascript" src="//code.jquery.com/ui/1.12.0/jquery-ui.min.js"></script>
+
+<link rel="stylesheet" href="//appsforoffice.microsoft.com/fabric/1.0/fabric.min.css">
+<link rel="stylesheet" href="//appsforoffice.microsoft.com/fabric/1.0/fabric.components.min.css">
+
+<script type="text/javascript" src="//cdn.datatables.net/1.10.12/js/jquery.dataTables.min.js"></script>
+<link type="text/css" rel="stylesheet" href="//cdn.datatables.net/1.10.12/css/jquery.dataTables.min.css" />
+
+
+<style type="text/css">
+  .largeListFloatingDiv {
+    position: fixed;
+    top: 10em;
+    right: 1em;
+    color: black;
+    background: white;
+    border: 3px solid #7D8077;
+    width: 300px;
+    padding: 5px;
+    z-index: 500;
+  }
+</style>
+
+<div id="largeListDiv" class="largeListFloatingDiv">
+  <span id='LookupTitle' class='ms-font-xl'></span><br>
+  <table id='largeListTable'>
+    <tr>
+      <th></th>
+    </tr>
+  </table>
+</div>
+
+
+<script type="text/javascript">
+  ////////////////////////////////////////////////////////////////////////
+  //SET THESE VARIABLES APPROPRIATELY 
+  ////////////////////////////////////////////////////////////////////////////////
+  var LIST_NAME = "Test SPD"; //list name for the list that the form is for
+  var LOOKUP_TO_LIST = "PnpList"; //list name of large list that form has a lookup for
+  var LOOKUP_TO_LIST_FIELD = "first_name"; //field in large list that users will see on the form
+  var INTERNAL_FIELD_NAME_OF_LOOKUP_FIELD = "Column"; //INTERNAL field name of lookup field on form
+  var DISPLAY_NAME_OF_LOOKUP_FIELD = "Column"; //Display name of lookup field on form
+
+  var IS_MULTI = false;
+
+  GetLargeListItems();
+  $("#LookupTitle").html(DISPLAY_NAME_OF_LOOKUP_FIELD);
+
+  jQuery(document).ready(function ($) {
+    DisplaySelectedLargeListItems();
+    $("#largeListDiv").draggable();
+
+    $("table.ms-formtable td").each(function () {
+      if (this.innerHTML.indexOf('FieldInternalName="' + INTERNAL_FIELD_NAME_OF_LOOKUP_FIELD + '"') != -1) {
+        if (this.innerHTML.indexOf("SPFieldLookupMulti") > 0) {
+          IS_MULTI = true;
+        }
+        $(this).find("span").html("<div id='SelectedLargeListItemes'></div>");
+      }
+    });
+
+
+  });
+
+  var oTable;
+  var global_results = new Array();
+
+  function GetLargeListItems(nextlink) {
+    //update they query below to return a subset of items from the lookup list in order to achieve the best performance possible
+    var url = _spPageContextInfo.webAbsoluteUrl + "/_api/Web/Lists/GetByTitle('" + LOOKUP_TO_LIST +
+      "')/items?$select=Id," + LOOKUP_TO_LIST_FIELD + "&$top=5000";
+    if (nextlink != undefined) {
+      url = nextlink;
+    }
+    var call = $.ajax({
+      url: url,
+      type: "GET",
+      dataType: "json",
+      headers: {
+        Accept: "application/json;odata=nometadata"
+      }
+
+    });
+    call.done(function (data, textStatus, jqXHR) {
+      global_results.push.apply(global_results, data.value);
+      if (data["odata.nextLink"] != undefined) {
+        GetLargeListItems(data["odata.nextLink"]);
+      } else {
+        oTable = $("#largeListTable").dataTable({
+          "bDestroy": true,
+          "fnDrawCallback": rowClick,
+          "bProcessing": true,
+          "aaData": global_results,
+          "aoColumns": [{
+              "mData": LOOKUP_TO_LIST_FIELD
+            }
+
+          ],
+          "iDisplayLength": 10,
+          "bLengthChange": false,
+          "bProcessing": true
+        });
+      }
+    });
+
+    call.fail(function (jqXHR, textStatus, errorThrown) {
+      alert("Error retrieving large list items: " + jqXHR.responseText);
+    });
+  }
+
+  function rowClick() {
+
+    $("tr[role='row']").unbind("click");
+    $("tr[role='row']").click(function () {
+      event.stopPropagation();
+      var aPos = oTable.fnGetPosition(this);
+      // Get the data array for this row
+      var aData = oTable.fnGetData(aPos);
+      if (aData[LOOKUP_TO_LIST_FIELD] != undefined) {
+        var r = confirm("Add '" + aData[LOOKUP_TO_LIST_FIELD] + "' as a " + DISPLAY_NAME_OF_LOOKUP_FIELD + "?");
+        if (r == true) {
+          DisplaySelectedLargeListItems(aData.Id);
+        }
+      }
+    });
+  }
+
+  function DisplaySelectedLargeListItems(addSelectedItem) {
+    $("#SelectedLargeListItemes").empty();
+
+    var call = $.ajax({
+      url: _spPageContextInfo.webAbsoluteUrl + "/_api/Web/Lists/GetByTitle('" + LIST_NAME + "')/items?$select=Id," +
+        INTERNAL_FIELD_NAME_OF_LOOKUP_FIELD + "/Id," +
+        INTERNAL_FIELD_NAME_OF_LOOKUP_FIELD + "/" + LOOKUP_TO_LIST_FIELD + "&$expand=" +
+        INTERNAL_FIELD_NAME_OF_LOOKUP_FIELD + "&$filter= ID eq " +
+        getParameterByName("ID"),
+      type: "GET",
+      dataType: "json",
+      headers: {
+        Accept: "application/json;odata=verbose"
+      }
+
+    });
+    call.done(function (data, textStatus, jqXHR) {
+      var choices = new Array();
+      if (IS_MULTI) {
+        for (index in data.d.results[0][INTERNAL_FIELD_NAME_OF_LOOKUP_FIELD].results) {
+          $("#SelectedLargeListItemes").append("<span class='selectedLargeListItem' data-id='" + data.d.results[0][
+              INTERNAL_FIELD_NAME_OF_LOOKUP_FIELD
+            ].results[index].Id + "'>" +
+            data.d.results[0][INTERNAL_FIELD_NAME_OF_LOOKUP_FIELD].results[index][LOOKUP_TO_LIST_FIELD] +
+            "<i class='ms-Icon ms-Icon--x' onclick='$(this).closest(\"span\").remove();RemoveSelectedLargeListItem();' aria-hidden='true'></i></span><br>"
+          );
+          choices.push(data.d.results[0][INTERNAL_FIELD_NAME_OF_LOOKUP_FIELD].results[index].Id);
+        }
+      } else if (data.d.results[0][INTERNAL_FIELD_NAME_OF_LOOKUP_FIELD].Id != 0) {
+        $("#SelectedLargeListItemes").append("<span class='selectedLargeListItem' data-id='" + data.d.results[0][
+            INTERNAL_FIELD_NAME_OF_LOOKUP_FIELD
+          ].Id + "'>" +
+          data.d.results[0][INTERNAL_FIELD_NAME_OF_LOOKUP_FIELD][LOOKUP_TO_LIST_FIELD] +
+          "<i class='ms-Icon ms-Icon--x' onclick='$(this).closest(\"span\").remove();RemoveSelectedLargeListItem();' aria-hidden='true'></i></span><br>"
+        );
+        choices.push(data.d.results[0][INTERNAL_FIELD_NAME_OF_LOOKUP_FIELD].Id);
+      }
+      if (addSelectedItem != undefined) {
+        choices.push(addSelectedItem);
+        UpdateMetadata(choices);
+      }
+    });
+
+    call.fail(function (jqXHR, textStatus, errorThrown) {
+      alert("Error retrieving selected items: " + jqXHR.responseText);
+    });
+  }
+
+  function RemoveSelectedLargeListItem() {
+
+    var choices = new Array();
+    $(".selectedLargeListItem").each(function () {
+      choices.push($(this).attr("data-id"));
+    });
+    UpdateMetadata(choices);
+
+  }
+
+  function UpdateMetadata(choices) {
+    var call2 = $.ajax({
+      url: _spPageContextInfo.webAbsoluteUrl + "/_api/Web/Lists/GetByTitle('" + LIST_NAME + "')",
+      type: "GET",
+      dataType: "json",
+      headers: {
+        Accept: "application/json;odata=verbose"
+      }
+
+    });
+    call2.done(function (data, textStatus, jqXHR) {
+
+      var field = INTERNAL_FIELD_NAME_OF_LOOKUP_FIELD + "Id";
+      var itemData = {};
+      itemData["__metadata"] = {
+        type: data.d.ListItemEntityTypeFullName
+      };
+      if (IS_MULTI) {
+        itemData[field] = {
+          results: choices
+        };
+      } else {
+        if (choices.length == 0) {
+          itemData[field] = 0;
+        } else {
+          itemData[field] = choices[choices.length - 1];
+        }
+
+      }
+
+      var currentItemID = getParameterByName("ID");
+      var call = jQuery.ajax({
+        url: _spPageContextInfo.webAbsoluteUrl +
+          "/_api/Web/Lists/getByTitle('" + LIST_NAME + "')/Items(" + currentItemID + ")",
+        type: "POST",
+        data: JSON.stringify(itemData),
+        headers: {
+          "Accept": "application/json",
+          "content-type": "application/json;odata=verbose",
+          "X-RequestDigest": document.getElementById("__REQUESTDIGEST").value,
+          "X-HTTP-Method": "PATCH",
+          "IF-MATCH": "*"
+        }
+      });
+      call.done(function (data, textStatus, jqXHR) {
+        window.location = window.location;
+      });
+      call.fail(function (jqXHR, textStatus, errorThrown) {
+        alert("Error updating metadata: " + errorThrown);
+      });
+
+    });
+
+    call2.fail(function (jqXHR, textStatus, errorThrown) {
+      alert("Error retrieving ListItemEntityTypeFullName: " + jqXHR.responseText);
+    });
+
+  }
+
+
+  function getParameterByName(key) {
+    key = key.replace(/[*+?^$.\[\]{}()|\\\/]/g, "\\$&"); // escape RegEx meta chars
+    var match = location.search.match(new RegExp("[?&]" + key + "=([^&]+)(&|$)"));
+    return match && decodeURIComponent(match[1].replace(/\+/g, " "));
+  }
+</script>
