@@ -1,0 +1,116 @@
+<script type="text/javascript" src="//code.jquery.com/jquery-1.12.3.min.js"></script>
+
+<script type="text/javascript" src="//code.jquery.com/ui/1.12.0/jquery-ui.min.js"></script>
+
+<link rel="stylesheet" href="//appsforoffice.microsoft.com/fabric/1.0/fabric.min.css">
+<link rel="stylesheet" href="//appsforoffice.microsoft.com/fabric/1.0/fabric.components.min.css">
+
+<script type="text/javascript" src="//cdn.datatables.net/1.10.12/js/jquery.dataTables.min.js"></script>
+<link type="text/css" rel="stylesheet" href="//cdn.datatables.net/1.10.12/css/jquery.dataTables.min.css" />
+
+<style type="text/css">
+  .largeListFloatingDiv {
+    position: fixed;
+    top: 10em;
+    right: 1em;
+    color: black;
+    background: white;
+    border: 3px solid #7D8077;
+    width: 450px;
+    padding: 5px;
+    z-index: 500;
+  }
+tr.odd {
+background-color: #8ebcd1 !important;
+}
+table.dataTable tbody tr {
+  cursor: pointer;
+}
+table.dataTable tbody tr:hover{background-color: #777 !important;}
+</style>
+
+<div id="largeListDiv" class="largeListFloatingDiv">
+  <span id='LookupTitle' class='ms-font-xl'></span><br>
+  <table id='largeListTable'>
+    <tr>
+      <th></th>
+      <th></th>
+    </tr>
+  </table>
+</div>
+
+<script>
+  var oTable;
+  var global_results = new Array();
+  var listName = "Ticket Tracking"; //"YourListName"; //Needs to be set to the name of the List
+
+  GetLargeListItems();
+  jQuery(document).ready(function ($) {
+    $("#largeListDiv").draggable();
+  });
+
+  function GetLargeListItems(nextlink) {
+    // var url = _spPageContextInfo.webAbsoluteUrl 
+    var url = "http://sharepoint.chemtrec.com/sites/Chemtrec/_api/Web/Lists/GetByTitle('" + listName +
+      "')/items?$select=*&$top=5000";
+    if (nextlink != undefined) {
+      url = nextlink;
+    }
+    var call = $.ajax({
+      url: url,
+      type: "GET",
+      dataType: "json",
+      headers: {
+        Accept: "application/json;odata=verbose"
+      }
+
+    });
+    call.done(function (data, textStatus, jqXHR) {
+      global_results.push.apply(global_results, data.d.results);
+      if (data.d["__next"] != undefined) {
+        GetLargeListItems(data.d["__next"]);
+      } else {
+        oTable = $("#largeListTable").dataTable({
+          "bDestroy": true,
+          "fnDrawCallback": rowClick,
+          "bProcessing": true,
+          "aaData": global_results,
+          "aoColumns": [{
+              "mData": "Title"
+            },
+            {
+              "mData": "Subject"
+            }
+          ],
+          "iDisplayLength": 10,
+          "bLengthChange": false,
+          "bProcessing": true
+        });
+      }
+    });
+
+    call.fail(function (jqXHR, textStatus, errorThrown) {
+      alert("Error retrieving large list items: " + jqXHR.responseText);
+    });
+  }
+
+
+
+  function rowClick() {
+
+    $("tr[role='row']").unbind("click");
+    $("tr[role='row']").click(function () {
+      event.stopPropagation();
+      var aPos = oTable.fnGetPosition(this);
+      // Get the data array for this row
+      var aData = oTable.fnGetData(aPos);
+      if (aData["Title"] != undefined) {
+        var r = confirm("Add '" + aData["Title"] + "' as a " + "Column Value" + "?");
+        if (r == true) {
+          alert("Add some custom code here");
+          //DisplaySelectedLargeListItems(aData.Id);
+        }
+      }
+    });
+  }
+</script>
